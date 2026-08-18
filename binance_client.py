@@ -62,7 +62,7 @@ def get_filtered_symbols():
     url = "https://api.binance.com/api/v3/exchangeInfo"
     
     try:
-        response = requests.get(url, timeout=40)
+        response = session.get(url, timeout=40)
         response.raise_for_status()
         exchange_info = response.json()
         
@@ -85,7 +85,7 @@ def fetch_top_volume_symbols(filtered_symbols):
     url = "https://api.binance.com/api/v3/ticker/24hr"
 
     try:
-        response = requests.get(url, timeout=40)
+        response = session.get(url, timeout=40)
         response.raise_for_status()
         tickers = response.json()
 
@@ -147,8 +147,8 @@ def fetch_top_volume_symbols(filtered_symbols):
 
 def get_klines(
     symbol,
-    interval="5m",
-    limit=13,
+    interval=KLINE_INTERVAL,
+    limit=KLINE_REQUEST_LIMIT,
 ):
     """
     Fetch recent Binance klines and return the latest
@@ -185,7 +185,7 @@ def get_klines(
             if kline[6] <= current_time_ms
         ]
 
-        return completed_klines[-12:]
+        return completed_klines[-COMPLETED_KLINES_COUNT:]
 
     except requests.exceptions.RequestException as error:
         print(

@@ -253,7 +253,7 @@ def run_bot():
                             "The Market Scanner is running.\n\n"
                             "It checks the top trading pairs "
                             "and sends an alert when a symbol "
-                            "increases by at least 3% "
+                            f"increases by at least {MIN_1H_PRICE_CHANGE:g}% "
                             "during the last hour.\n\n"
                             "Use /scan to start a manual scan."
                         ),

@@ -10,6 +10,8 @@ from binance_client import (
 )
 from scanner import scan_symbols
 
+from config import MIN_1H_PRICE_CHANGE, ALERT_COOLDOWN_SECONDS
+
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CONFIGURED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -73,9 +75,7 @@ def send_alert(chat_id, result):
     Send a Telegram alert for a symbol that passed
     Condition 1.
     """
-
     symbol = html.escape(result["symbol"])
-
     starting_price = result["starting_price"]
     ending_price = result["ending_price"]
     price_change = result["price_change"]
@@ -90,7 +90,7 @@ def send_alert(chat_id, result):
         f"<b>Ending Price:</b> "
         f"{ending_price}\n\n"
         "✅ <b>Condition 1 passed</b>\n"
-        "Price increased by at least 3% "
+        f"Price increased by at least {MIN_1H_PRICE_CHANGE:g}% "
         "during the last hour."
     )
 
@@ -104,37 +104,43 @@ def send_alert(chat_id, result):
     print(f"Alert sent for {symbol}")
 
 
-def scan_and_send_alerts(chat_id):
+def scan_and_send_alerts(chat_id, last_alert_times):
     """
-    Get top symbols, scan them, and send alerts
-    for symbols that passed Condition 1.
+    Get top symbols, scan them, and send alerts for symbols
+    that passed Condition 1, skipping any symbol still within
+    its alert cooldown.
     """
-
     print("\nStarting market scan...")
 
     top_symbols = get_top_symbols()
 
-    passed_symbols = scan_symbols(
-        top_symbols
-    )
+    passed_symbols = scan_symbols(top_symbols)
 
     if not passed_symbols:
         print("No symbols passed Condition 1")
         return
 
-    print(
-        f"{len(passed_symbols)} symbol(s) "
-        "passed Condition 1"
-    )
+    print(f"{len(passed_symbols)} symbol(s) passed Condition 1")
+
+    now = time.monotonic()
 
     for result in passed_symbols:
-        send_alert(chat_id, result)
+        symbol = result["symbol"]
+        last_alert = last_alert_times.get(symbol)
 
+        if last_alert is not None and (now - last_alert) < ALERT_COOLDOWN_SECONDS:
+            remaining = ALERT_COOLDOWN_SECONDS - (now - last_alert)
+            print(f"{symbol}: skipping alert, cooldown ({remaining:.0f}s left)")
+            continue
+
+        send_alert(chat_id, result)
+        last_alert_times[symbol] = now
 
 def run_bot():
     active_chat_id = CONFIGURED_CHAT_ID
     offset = None
     next_scan_time = 0
+    last_alert_times = {}
 
     if active_chat_id:
         print(
@@ -158,7 +164,7 @@ def run_bot():
             ):
                 try:
                     scan_and_send_alerts(
-                        active_chat_id
+                        active_chat_id, last_alert_times
                     )
 
                     next_scan_time = (
@@ -254,7 +260,7 @@ def run_bot():
                     )
 
                     # Run scan immediately
-                    scan_and_send_alerts(chat_id)
+                    scan_and_send_alerts(chat_id, last_alert_times)
 
                     next_scan_time = (
                         time.monotonic()
@@ -269,7 +275,7 @@ def run_bot():
                         text="Starting manual market scan...",
                     )
 
-                    scan_and_send_alerts(chat_id)
+                    scan_and_send_alerts(chat_id, last_alert_times)
 
                     # Reset scheduled scan timer
                     next_scan_time = (

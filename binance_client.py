@@ -62,7 +62,7 @@ def get_filtered_symbols():
     url = "https://api.binance.com/api/v3/exchangeInfo"
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=40)
         response.raise_for_status()
         exchange_info = response.json()
         
@@ -127,7 +127,7 @@ def fetch_top_volume_symbols(filtered_symbols):
         ):
             symbol = ticker.get("symbol", "N/A")
             quote_volume = float(
-                ticker.get("quoteVolume", 0)
+                ticker.get("quoteVolume") or 0
             )
 
             print(

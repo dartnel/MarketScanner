@@ -1,0 +1,5 @@
+# Scanner settings
+
+TOP_SYMBOLS_COUNT = 50
+
+MIN_1H_PRICE_CHANGE = 3.0

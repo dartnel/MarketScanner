@@ -48,6 +48,13 @@ def scan_symbols(top_symbols):
 
         klines = get_klines(symbol)
 
+        if klines is None:
+            return None
+
+        if len(klines) < COMPLETED_KLINES_COUNT:
+            print(f"{symbol}: Not enough completed klines")
+            return None
+
         result = check_price_momentum(
             symbol,
             klines,

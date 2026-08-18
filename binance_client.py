@@ -154,6 +154,8 @@ def get_klines(
     Fetch recent Binance klines and return the latest
     12 completed candles.
 
+    Returns None if the request fails after retries.
+
     Retries temporary HTTP errors, including 429,
     and respects the Retry-After header when available.
     """
@@ -192,4 +194,4 @@ def get_klines(
             f"Error fetching klines for {symbol} "
             f"after retries: {error}"
         )
-        return []
+        return None

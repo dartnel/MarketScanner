@@ -1,3 +1,4 @@
+import time
 from binance_client import get_klines
 from calculations import calculate_price_change
 from config import MIN_1H_PRICE_CHANGE
@@ -35,15 +36,9 @@ def check_price_momentum(symbol, klines):
 
 
 def scan_symbols(top_symbols):
-    """
-    Scan all symbols from the configured top symbols list.
-
-    Returns only symbols that passed Condition 1.
-    """
-
     passed_symbols = []
 
-    for ticker in top_symbols:
+    for index, ticker in enumerate(top_symbols):
         symbol = ticker.get("symbol")
 
         if not symbol:
@@ -58,15 +53,17 @@ def scan_symbols(top_symbols):
             klines,
         )
 
-        if result is None:
-            continue
+        if result is not None:
+            print(
+                f"{symbol}: "
+                f"{result['price_change']:.2f}%"
+            )
 
-        print(
-            f"{symbol}: "
-            f"{result['price_change']:.2f}%"
-        )
+            if result["condition_passed"]:
+                passed_symbols.append(result)
 
-        if result["condition_passed"]:
-            passed_symbols.append(result)
+        # Small delay before the next Binance API request
+        if index < len(top_symbols) - 1:
+            time.sleep(0.15)
 
     return passed_symbols

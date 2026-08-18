@@ -1,10 +1,36 @@
-import requests
 import time
+import requests
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 from config import TOP_SYMBOLS_COUNT
 
 KLINE_INTERVAL = "5m"
 KLINE_REQUEST_LIMIT = 13
 COMPLETED_KLINES_COUNT = 12
+
+session = requests.Session()
+
+retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[
+        429,
+        500,
+        502,
+        503,
+        504,
+    ],
+    allowed_methods=["GET"],
+    respect_retry_after_header=True,
+)
+
+adapter = HTTPAdapter(
+    max_retries=retry_strategy
+)
+
+session.mount("https://", adapter)
 
 # Define excluded base assets
 EXCLUDED_BASE_ASSETS = {
@@ -76,7 +102,7 @@ def fetch_top_volume_symbols(filtered_symbols):
 
         sorted_tickers = sorted(
             filtered_tickers,
-            key=lambda item: float(item.get("quoteVolume", 0)),
+            key=lambda item: float(item.get("quoteVolume") or 0),
             reverse=True,
         )
 
@@ -121,15 +147,15 @@ def fetch_top_volume_symbols(filtered_symbols):
 
 def get_klines(
     symbol,
-    interval=KLINE_INTERVAL,
-    limit=KLINE_REQUEST_LIMIT,
+    interval="5m",
+    limit=13,
 ):
     """
     Fetch recent Binance klines and return the latest
-    completed candles.
+    12 completed candles.
 
-    The extra candle is requested because the latest candle
-    may still be open and should not be used for calculations.
+    Retries temporary HTTP errors, including 429,
+    and respects the Retry-After header when available.
     """
 
     url = "https://api.binance.com/api/v3/klines"
@@ -141,11 +167,12 @@ def get_klines(
     }
 
     try:
-        response = requests.get(
+        response = session.get(
             url,
             params=params,
             timeout=40,
         )
+
         response.raise_for_status()
 
         klines = response.json()
@@ -158,10 +185,11 @@ def get_klines(
             if kline[6] <= current_time_ms
         ]
 
-        return completed_klines[-COMPLETED_KLINES_COUNT:]
+        return completed_klines[-12:]
 
     except requests.exceptions.RequestException as error:
         print(
-            f"Error fetching klines for {symbol}: {error}"
+            f"Error fetching klines for {symbol} "
+            f"after retries: {error}"
         )
         return []

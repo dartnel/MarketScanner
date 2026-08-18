@@ -232,7 +232,7 @@ def run_bot():
 
                 if command == "/start":
 
-                    if not active_chat_id:
+                    if not active_chat_id and not CONFIGURED_CHAT_ID:
                         active_chat_id = chat_id
 
                         print(

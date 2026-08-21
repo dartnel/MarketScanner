@@ -1,3 +1,4 @@
+import logging
 import html
 import os
 import time
@@ -12,6 +13,7 @@ from scanner import scan_symbols
 
 from config import MIN_1H_PRICE_CHANGE, ALERT_COOLDOWN_SECONDS
 
+logger = logging.getLogger(__name__)
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CONFIGURED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -70,25 +72,28 @@ def get_top_symbols():
     return top_symbols
 
 
-def send_alert(chat_id, result):
+def send_alert(chat_id, results):
     """
-    Send a Telegram alert for a symbol that passed
+    Send one Telegram alert for all symbols that passed
     Condition 1.
     """
-    symbol = html.escape(result["symbol"])
-    starting_price = result["starting_price"]
-    ending_price = result["ending_price"]
-    price_change = result["price_change"]
+    symbol_lines = []
+
+    for result in results:
+        symbol = html.escape(result["symbol"])
+        starting_price = result["starting_price"]
+        ending_price = result["ending_price"]
+        price_change = result["price_change"]
+
+        symbol_lines.append(
+            f"<b>{symbol}</b>: +{price_change:.2f}%\n"
+            f"Starting: {starting_price} | Ending: {ending_price}"
+        )
 
     message = (
         "🚨 <b>Market Scanner Alert</b>\n\n"
-        f"<b>Symbol:</b> {symbol}\n"
-        f"<b>1h Price Change:</b> "
-        f"+{price_change:.2f}%\n\n"
-        f"<b>Starting Price:</b> "
-        f"{starting_price}\n"
-        f"<b>Ending Price:</b> "
-        f"{ending_price}\n\n"
+        + "\n\n".join(symbol_lines)
+        + "\n\n"
         "✅ <b>Condition 1 passed</b>\n"
         f"Price increased by at least {MIN_1H_PRICE_CHANGE:g}% "
         "during the last hour."
@@ -101,7 +106,7 @@ def send_alert(chat_id, result):
         parse_mode="HTML",
     )
 
-    print(f"Alert sent for {symbol}")
+    logger.info("Alert sent for %d symbol(s)", len(results))
 
 
 def scan_and_send_alerts(chat_id, last_alert_times):
@@ -110,19 +115,23 @@ def scan_and_send_alerts(chat_id, last_alert_times):
     that passed Condition 1, skipping any symbol still within
     its alert cooldown.
     """
-    print("\nStarting market scan...")
+    logger.info("Starting market scan...")
 
     top_symbols = get_top_symbols()
 
     passed_symbols = scan_symbols(top_symbols)
 
+    if passed_symbols is None:
+        print("Scan failed — no alerts sent")
+        return
     if not passed_symbols:
-        print("No symbols passed Condition 1")
+        logger.info("No symbols passed Condition 1")
         return
 
-    print(f"{len(passed_symbols)} symbol(s) passed Condition 1")
+    logger.info("%d symbol(s) passed Condition 1", len(passed_symbols))
 
     now = time.monotonic()
+    alert_results = []
 
     for result in passed_symbols:
         symbol = result["symbol"]
@@ -130,10 +139,19 @@ def scan_and_send_alerts(chat_id, last_alert_times):
 
         if last_alert is not None and (now - last_alert) < ALERT_COOLDOWN_SECONDS:
             remaining = ALERT_COOLDOWN_SECONDS - (now - last_alert)
-            print(f"{symbol}: skipping alert, cooldown ({remaining:.0f}s left)")
+            logger.info("%s: skipping alert, cooldown (%.0fs left)", symbol, remaining)
             continue
 
-        send_alert(chat_id, result)
+        alert_results.append(result)
+
+    if not alert_results:
+        logger.info("No symbols eligible for an alert")
+        return
+
+    send_alert(chat_id, alert_results)
+
+    for result in alert_results:
+        symbol = result["symbol"]
         last_alert_times[symbol] = now
 
 def run_bot():
@@ -143,15 +161,9 @@ def run_bot():
     last_alert_times = {}
 
     if active_chat_id:
-        print(
-            f"Using configured chat_id: "
-            f"{active_chat_id}"
-        )
+        logger.info("Using configured chat_id: %s", active_chat_id)
     else:
-        print(
-            "Send /start to the bot "
-            "to detect your chat ID"
-        )
+        logger.info("Send /start to the bot to detect your chat ID")
 
     while True:
         try:
@@ -173,9 +185,7 @@ def run_bot():
                     )
 
                 except Exception as error:
-                    print(
-                        f"Market scan failed: {error}"
-                    )
+                    logger.error("Market scan failed: %s", error)
 
                     # Retry after 60 seconds
                     next_scan_time = (
@@ -241,10 +251,7 @@ def run_bot():
                     if not active_chat_id and not CONFIGURED_CHAT_ID:
                         active_chat_id = chat_id
 
-                        print(
-                            "Detected chat_id: "
-                            f"{active_chat_id}"
-                        )
+                        logger.info("Detected chat_id: %s", active_chat_id)
 
                     telegram_request(
                         "sendMessage",
@@ -284,10 +291,10 @@ def run_bot():
                     )
 
         except KeyboardInterrupt:
-            print("Bot stopped")
+            logger.info("Bot stopped")
             break
 
         except Exception as error:
-            print(f"Bot error: {error}")
+            logger.error("Bot error: %s", error)
 
             time.sleep(5)

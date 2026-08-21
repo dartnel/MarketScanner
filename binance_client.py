@@ -1,3 +1,4 @@
+import logging
 import time
 import requests
 
@@ -5,6 +6,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from config import TOP_SYMBOLS_COUNT
+
+logger = logging.getLogger(__name__)
 
 KLINE_INTERVAL = "5m"
 KLINE_REQUEST_LIMIT = 13
@@ -74,11 +77,11 @@ def get_filtered_symbols():
                 symbol_data.get("baseAsset") not in EXCLUDED_BASE_ASSETS):
                 filtered_symbols.add(symbol_data.get("symbol"))
         
-        print(f"Found {len(filtered_symbols)} trading symbols with USDT quote asset (excluding stablecoins)")
+        logger.info("Found %d trading symbols with USDT quote asset (excluding stablecoins)", len(filtered_symbols))
         return filtered_symbols
     
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching exchangeInfo from Binance API: {e}")
+        logger.error("Error fetching exchangeInfo from Binance API: %s", e)
         return set()
 
 def fetch_top_volume_symbols(filtered_symbols):
@@ -95,10 +98,7 @@ def fetch_top_volume_symbols(filtered_symbols):
             if ticker.get("symbol") in filtered_symbols
         ]
 
-        print(
-            f"Filtered to {len(filtered_tickers)} "
-            f"symbols from ticker data"
-        )
+        logger.info("Filtered to %d symbols from ticker data", len(filtered_tickers))
 
         sorted_tickers = sorted(
             filtered_tickers,
@@ -108,18 +108,15 @@ def fetch_top_volume_symbols(filtered_symbols):
 
         top_symbols = sorted_tickers[:TOP_SYMBOLS_COUNT]
 
-        print(
-            f"\nTop {TOP_SYMBOLS_COUNT} symbols "
-            f"by 24hr quote volume:"
-        )
+        logger.info("Top %d symbols by 24hr quote volume", TOP_SYMBOLS_COUNT)
 
-        print(
+        logger.info(
             f"{'#':<4} "
             f"{'Symbol':<12} "
             f"{'Quote Volume':<20}"
         )
 
-        print("-" * 36)
+        logger.info("-" * 36)
 
         for index, ticker in enumerate(
             top_symbols,
@@ -130,7 +127,7 @@ def fetch_top_volume_symbols(filtered_symbols):
                 ticker.get("quoteVolume") or 0
             )
 
-            print(
+            logger.info(
                 f"{index:<4} "
                 f"{symbol:<12} "
                 f"{quote_volume:>18,.2f}"
@@ -139,10 +136,7 @@ def fetch_top_volume_symbols(filtered_symbols):
         return top_symbols
 
     except requests.exceptions.RequestException as error:
-        print(
-            f"Error fetching ticker data "
-            f"from Binance API: {error}"
-        )
+        logger.error("Error fetching ticker data from Binance API: %s", error)
         return []
 
 def get_klines(
@@ -190,8 +184,5 @@ def get_klines(
         return completed_klines[-COMPLETED_KLINES_COUNT:]
 
     except requests.exceptions.RequestException as error:
-        print(
-            f"Error fetching klines for {symbol} "
-            f"after retries: {error}"
-        )
+        logger.error("Error fetching klines for %s after retries: %s", symbol, error)
         return None

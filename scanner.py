@@ -1,8 +1,10 @@
+import logging
 import time
-from binance_client import get_klines
+from binance_client import get_klines, COMPLETED_KLINES_COUNT
 from calculations import calculate_price_change
 from config import MIN_1H_PRICE_CHANGE
 
+logger = logging.getLogger(__name__)
 
 def check_price_momentum(symbol, klines):
     """
@@ -11,7 +13,7 @@ def check_price_momentum(symbol, klines):
     """
 
     if len(klines) < 12:
-        print(f"{symbol}: Not enough completed klines")
+        logger.warning("%s: Not enough completed klines", symbol)
         return None
 
     starting_price = float(klines[0][1])
@@ -44,16 +46,15 @@ def scan_symbols(top_symbols):
         if not symbol:
             continue
 
-        print(f"Checking {symbol}...")
+        logger.debug("Checking %s...", symbol)
 
         klines = get_klines(symbol)
 
         if klines is None:
-            return None
-
+            continue
         if len(klines) < COMPLETED_KLINES_COUNT:
-            print(f"{symbol}: Not enough completed klines")
-            return None
+            logger.warning("%s: Not enough completed klines", symbol)
+            continue
 
         result = check_price_momentum(
             symbol,
@@ -61,10 +62,7 @@ def scan_symbols(top_symbols):
         )
 
         if result is not None:
-            print(
-                f"{symbol}: "
-                f"{result['price_change']:.2f}%"
-            )
+            logger.info("%s: %.2f%%", symbol, result["price_change"])
 
             if result["condition_passed"]:
                 passed_symbols.append(result)

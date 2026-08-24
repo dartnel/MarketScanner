@@ -186,3 +186,34 @@ def get_klines(
     except requests.exceptions.RequestException as error:
         logger.error("Error fetching klines for %s after retries: %s", symbol, error)
         return None
+        
+
+def get_hourly_klines(symbol, baseline_hours=5):
+    """
+    Fetch the last `baseline_hours` completed hourly klines,
+    used as the volume baseline.
+    """
+    limit = baseline_hours + 1  # +1 buffer in case the last is still in-progress
+    url = "https://api.binance.com/api/v3/klines"
+    params = {
+        "symbol": symbol,
+        "interval": "1h",
+        "limit": limit,
+    }
+    try:
+        response = session.get(url, params=params, timeout=40)
+        response.raise_for_status()
+        klines = response.json()
+        current_time_ms = int(time.time() * 1000)
+        completed_klines = [
+            kline for kline in klines
+            if kline[6] <= current_time_ms
+        ]
+        return completed_klines[-baseline_hours:]
+    except requests.exceptions.RequestException as error:
+        logger.error(
+            "Error fetching hourly klines for %s after retries: %s",
+            symbol,
+            error,
+        )
+        return []

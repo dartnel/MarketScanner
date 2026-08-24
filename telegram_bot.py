@@ -7,11 +7,15 @@ import requests
 
 from binance_client import (
     get_filtered_symbols,
-    fetch_top_volume_symbols,
+    fetch_top_volume_symbols
 )
 from scanner import scan_symbols
 
-from config import MIN_1H_PRICE_CHANGE, ALERT_COOLDOWN_SECONDS
+from config import (
+    MIN_1H_PRICE_CHANGE,
+    ALERT_COOLDOWN_SECONDS,
+    VOLUME_SPIKE_MULTIPLIER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +79,7 @@ def get_top_symbols():
 def send_alert(chat_id, results):
     """
     Send one Telegram alert for all symbols that passed
-    Condition 1.
+    Condition 1 and Condition 2.
     """
     symbol_lines = []
 
@@ -84,10 +88,12 @@ def send_alert(chat_id, results):
         starting_price = result["starting_price"]
         ending_price = result["ending_price"]
         price_change = result["price_change"]
+        spike_ratio = result["spike_ratio"]
 
         symbol_lines.append(
             f"<b>{symbol}</b>: +{price_change:.2f}%\n"
-            f"Starting: {starting_price} | Ending: {ending_price}"
+            f"Starting: {starting_price} | Ending: {ending_price}\n"
+            f"Volume: {spike_ratio:.1f}x avg"
         )
 
     message = (
@@ -96,7 +102,10 @@ def send_alert(chat_id, results):
         + "\n\n"
         "✅ <b>Condition 1 passed</b>\n"
         f"Price increased by at least {MIN_1H_PRICE_CHANGE:g}% "
-        "during the last hour."
+        "during the last hour.\n\n"
+        "✅ <b>Condition 2 passed</b>\n"
+        f"Volume is at least {VOLUME_SPIKE_MULTIPLIER:g}x "
+        "the recent hourly average."
     )
 
     telegram_request(
@@ -107,7 +116,6 @@ def send_alert(chat_id, results):
     )
 
     logger.info("Alert sent for %d symbol(s)", len(results))
-
 
 def scan_and_send_alerts(chat_id, last_alert_times):
     """
@@ -125,10 +133,10 @@ def scan_and_send_alerts(chat_id, last_alert_times):
         print("Scan failed — no alerts sent")
         return
     if not passed_symbols:
-        logger.info("No symbols passed Condition 1")
+        logger.info("No symbols passed both conditions")
         return
 
-    logger.info("%d symbol(s) passed Condition 1", len(passed_symbols))
+    logger.info("%d symbol(s) passed both conditions", len(passed_symbols))
 
     now = time.monotonic()
     alert_results = []
@@ -261,8 +269,9 @@ def run_bot():
                             "It checks the top trading pairs "
                             "and sends an alert when a symbol "
                             f"increases by at least {MIN_1H_PRICE_CHANGE:g}% "
-                            "during the last hour.\n\n"
-                            "Use /scan to start a manual scan."
+                            "during the last hour, backed by volume "
+                            f"at least {VOLUME_SPIKE_MULTIPLIER:g}x the "
+                            "recent hourly average.\n\n"
                         ),
                     )
 
@@ -274,21 +283,6 @@ def run_bot():
                         + INTERVAL_SECONDS
                     )
 
-                elif command == "/scan":
-
-                    telegram_request(
-                        "sendMessage",
-                        chat_id=chat_id,
-                        text="Starting manual market scan...",
-                    )
-
-                    scan_and_send_alerts(chat_id, last_alert_times)
-
-                    # Reset scheduled scan timer
-                    next_scan_time = (
-                        time.monotonic()
-                        + INTERVAL_SECONDS
-                    )
 
         except KeyboardInterrupt:
             logger.info("Bot stopped")
